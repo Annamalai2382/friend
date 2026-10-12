@@ -50,21 +50,71 @@ export default function App() {
     }
   }, [isFinished]);
 
-  // STEP 3: Play video 1 (one.mp4)
+  // Listen for any user interaction to unlock audio / unmute videos
+  useEffect(() => {
+    const handleUnlockAudio = () => {
+      if (videoRef.current) {
+        videoRef.current.muted = false;
+      }
+      if (twoVideoRef.current) {
+        twoVideoRef.current.muted = false;
+      }
+    };
+
+    window.addEventListener('click', handleUnlockAudio);
+    window.addEventListener('touchstart', handleUnlockAudio);
+    window.addEventListener('keydown', handleUnlockAudio);
+
+    return () => {
+      window.removeEventListener('click', handleUnlockAudio);
+      window.removeEventListener('touchstart', handleUnlockAudio);
+      window.removeEventListener('keydown', handleUnlockAudio);
+    };
+  }, []);
+
+  // STEP 3: Play video 1 (one.mp4) unmuted
   useEffect(() => {
     if (showVideo && videoRef.current) {
-      videoRef.current.play().catch((err) => {
-        console.log("Browser autoplay policy override:", err);
-      });
+      const playVideo = async () => {
+        try {
+          videoRef.current.muted = false;
+          await videoRef.current.play();
+        } catch (err) {
+          console.log("Browser blocked unmuted autoplay, playing muted until tap:", err);
+          try {
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              await videoRef.current.play();
+            }
+          } catch (e) {
+            console.log("Autoplay failed:", e);
+          }
+        }
+      };
+      playVideo();
     }
   }, [showVideo]);
 
-  // STEP 4: Play video 2 (two.mp4) when Next is clicked
+  // STEP 4: Play video 2 (two.mp4) unmuted when Next is clicked
   useEffect(() => {
     if (showTwoVideo && twoVideoRef.current) {
-      twoVideoRef.current.play().catch((err) => {
-        console.log("Browser autoplay policy override for two.mp4:", err);
-      });
+      const playTwoVideo = async () => {
+        try {
+          twoVideoRef.current.muted = false;
+          await twoVideoRef.current.play();
+        } catch (err) {
+          console.log("Browser blocked unmuted autoplay for two.mp4, playing muted until tap:", err);
+          try {
+            if (twoVideoRef.current) {
+              twoVideoRef.current.muted = true;
+              await twoVideoRef.current.play();
+            }
+          } catch (e) {
+            console.log("Autoplay failed for two.mp4:", e);
+          }
+        }
+      };
+      playTwoVideo();
     }
   }, [showTwoVideo]);
 
@@ -143,6 +193,9 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
+            onClick={() => {
+              if (videoRef.current) videoRef.current.muted = false;
+            }}
             style={{
               position: 'fixed',
               inset: 0,
@@ -159,6 +212,10 @@ export default function App() {
               playsInline
               autoPlay
               controls
+              onPlay={() => {
+                // Attempt to unmute whenever video starts playing
+                if (videoRef.current) videoRef.current.muted = false;
+              }}
               onEnded={handleVideoEnded}
               style={{
                 width: '100%',
@@ -178,6 +235,9 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
+            onClick={() => {
+              if (twoVideoRef.current) twoVideoRef.current.muted = false;
+            }}
             style={{
               position: 'fixed',
               inset: 0,
@@ -194,6 +254,9 @@ export default function App() {
               playsInline
               autoPlay
               controls
+              onPlay={() => {
+                if (twoVideoRef.current) twoVideoRef.current.muted = false;
+              }}
               onEnded={handleTwoVideoEnded}
               style={{
                 width: '100%',
