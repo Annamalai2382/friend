@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, Gift, FileText, X, VolumeX, Play } from 'lucide-react';
+import { Crown, Gift, FileText, X, Play } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 import { SparkleCanvas } from './components/SparkleCanvas';
@@ -15,12 +15,10 @@ export default function App() {
   // Video 1 (one.mp4) states
   const [showVideo, setShowVideo] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
-  const [isVideoMuted, setIsVideoMuted] = useState(false);
   
   // Video 2 (two.mp4) & Gift states
   const [showTwoVideo, setShowTwoVideo] = useState(false);
   const [twoVideoEnded, setTwoVideoEnded] = useState(false);
-  const [isTwoVideoMuted, setIsTwoVideoMuted] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
 
   const videoRef = useRef(null);
@@ -79,55 +77,64 @@ export default function App() {
     }
   }, [isFinished, showVideo, videoEnded]);
 
-  // Listen for any user interaction to unlock audio / unmute videos
+  // Listen for any user interaction to unlock audio
   useEffect(() => {
     const handleUnlockAudio = () => {
       hasInteractedRef.current = true;
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       if (videoRef.current) {
         videoRef.current.muted = false;
-        setIsVideoMuted(false);
       }
       if (twoVideoRef.current) {
         twoVideoRef.current.muted = false;
-        setIsTwoVideoMuted(false);
       }
     };
 
     window.addEventListener('click', handleUnlockAudio);
     window.addEventListener('touchstart', handleUnlockAudio);
+    window.addEventListener('pointerdown', handleUnlockAudio);
     window.addEventListener('keydown', handleUnlockAudio);
 
     return () => {
       window.removeEventListener('click', handleUnlockAudio);
       window.removeEventListener('touchstart', handleUnlockAudio);
+      window.removeEventListener('pointerdown', handleUnlockAudio);
       window.removeEventListener('keydown', handleUnlockAudio);
     };
   }, []);
 
-  // STEP 3: Play video 1 (one.mp4) automatically
+  // STEP 3: Play video 1 (one.mp4) default unmuted
   useEffect(() => {
     if (showVideo && videoRef.current) {
       const playVideo = async () => {
         const video = videoRef.current;
         if (!video) return;
 
-        // Attempt 1: Try playing unmuted (succeeds if user clicked or browser allows)
+        // Default unmuted
+        video.muted = false;
+
         try {
-          video.muted = false;
           await video.play();
-          setIsVideoMuted(false);
           return;
         } catch (err) {
-          console.log("Browser blocked unmuted autoplay for one.mp4, falling back to muted autoplay:", err);
-        }
-
-        // Attempt 2: Play muted (guaranteed to autoplay automatically in all browsers)
-        try {
-          video.muted = true;
-          setIsVideoMuted(true);
-          await video.play();
-        } catch (e) {
-          console.log("Autoplay failed completely:", e);
+          console.log("Browser blocked unmuted autoplay for one.mp4, playing muted until tap:", err);
+          try {
+            video.muted = true;
+            await video.play();
+          } catch (e) {
+            console.log("Autoplay failed completely:", e);
+          }
         }
       };
 
@@ -135,29 +142,29 @@ export default function App() {
     }
   }, [showVideo]);
 
-  // STEP 4: Play video 2 (two.mp4) automatically when Next is clicked
+  // STEP 4: Play video 2 (two.mp4) default unmuted
   useEffect(() => {
     if (showTwoVideo && twoVideoRef.current) {
       const playTwoVideo = async () => {
         const video = twoVideoRef.current;
         if (!video) return;
 
+        video.muted = false;
+
         try {
-          video.muted = false;
           await video.play();
-          setIsTwoVideoMuted(false);
           return;
         } catch (err) {
           console.log("Browser blocked unmuted autoplay for two.mp4, playing muted until tap:", err);
           try {
             video.muted = true;
-            setIsTwoVideoMuted(true);
             await video.play();
           } catch (e) {
             console.log("Autoplay failed for two.mp4:", e);
           }
         }
       };
+
       playTwoVideo();
     }
   }, [showTwoVideo]);
@@ -213,7 +220,6 @@ export default function App() {
             onClick={() => {
               if (videoRef.current) {
                 videoRef.current.muted = false;
-                setIsVideoMuted(false);
               }
             }}
             style={{
@@ -232,11 +238,6 @@ export default function App() {
               playsInline
               autoPlay
               controls
-              onVolumeChange={() => {
-                if (videoRef.current) {
-                  setIsVideoMuted(videoRef.current.muted);
-                }
-              }}
               onEnded={handleVideoEnded}
               style={{
                 width: '100%',
@@ -244,46 +245,6 @@ export default function App() {
                 objectFit: 'cover'
               }}
             />
-
-            {/* Tap to Unmute Overlay Button if muted */}
-            {isVideoMuted && (
-              <motion.button
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (videoRef.current) {
-                    videoRef.current.muted = false;
-                    setIsVideoMuted(false);
-                  }
-                }}
-                style={{
-                  position: 'absolute',
-                  bottom: '90px',
-                  zIndex: 100000,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 24px',
-                  borderRadius: '30px',
-                  backgroundColor: 'rgba(20, 12, 28, 0.88)',
-                  border: '1.5px solid #f3d08a',
-                  color: '#f3d08a',
-                  fontFamily: "'Cinzel', serif",
-                  fontSize: '13px',
-                  letterSpacing: '1px',
-                  fontWeight: 'bold',
-                  boxShadow: '0 0 30px rgba(243, 208, 138, 0.6), 0 10px 25px rgba(0,0,0,0.8)',
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <VolumeX size={18} color="#f3d08a" /> Tap to Unmute 🔊
-              </motion.button>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -299,7 +260,6 @@ export default function App() {
             onClick={() => {
               if (twoVideoRef.current) {
                 twoVideoRef.current.muted = false;
-                setIsTwoVideoMuted(false);
               }
             }}
             style={{
@@ -318,11 +278,6 @@ export default function App() {
               playsInline
               autoPlay
               controls
-              onVolumeChange={() => {
-                if (twoVideoRef.current) {
-                  setIsTwoVideoMuted(twoVideoRef.current.muted);
-                }
-              }}
               onEnded={handleTwoVideoEnded}
               style={{
                 width: '100%',
@@ -330,46 +285,6 @@ export default function App() {
                 objectFit: 'cover'
               }}
             />
-
-            {/* Tap to Unmute Overlay Button if muted */}
-            {isTwoVideoMuted && (
-              <motion.button
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (twoVideoRef.current) {
-                    twoVideoRef.current.muted = false;
-                    setIsTwoVideoMuted(false);
-                  }
-                }}
-                style={{
-                  position: 'absolute',
-                  bottom: '90px',
-                  zIndex: 100000,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 24px',
-                  borderRadius: '30px',
-                  backgroundColor: 'rgba(20, 12, 28, 0.88)',
-                  border: '1.5px solid #f3d08a',
-                  color: '#f3d08a',
-                  fontFamily: "'Cinzel', serif",
-                  fontSize: '13px',
-                  letterSpacing: '1px',
-                  fontWeight: 'bold',
-                  boxShadow: '0 0 30px rgba(243, 208, 138, 0.6), 0 10px 25px rgba(0,0,0,0.8)',
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <VolumeX size={18} color="#f3d08a" /> Tap to Unmute 🔊
-              </motion.button>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -606,8 +521,8 @@ export default function App() {
               <motion.div
                 key="countdown-view"
                 initial={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.2, filter: 'blur(10px)' }}
-                transition={{ duration: 0.8, ease: 'easeInOut' }}
+                exit={{ opacity: 0, scale: 1.1 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
                 style={{
                   width: '100%',
                   maxWidth: '360px',
@@ -616,7 +531,9 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   textAlign: 'center',
-                  margin: 'auto'
+                  margin: 'auto',
+                  transform: 'translateZ(0)',
+                  willChange: 'transform, opacity'
                 }}
               >
                 {/* Crown */}
@@ -630,8 +547,9 @@ export default function App() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: '28px',
-                    boxShadow: '0 0 35px rgba(243, 208, 138, 0.6)',
-                    backgroundColor: 'rgba(20, 12, 28, 0.9)'
+                    boxShadow: '0 0 25px rgba(243, 208, 138, 0.5)',
+                    backgroundColor: 'rgba(20, 12, 28, 0.9)',
+                    transform: 'translateZ(0)'
                   }}
                 >
                   <Crown size={38} color="#f3d08a" />
@@ -647,23 +565,26 @@ export default function App() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: '0 0 40px rgba(243, 208, 138, 0.4)'
+                    boxShadow: '0 0 30px rgba(243, 208, 138, 0.3)',
+                    transform: 'translateZ(0)'
                   }}
                 >
                   <AnimatePresence mode="wait">
                     <motion.span
                       key={count}
-                      initial={{ scale: 0.3, opacity: 0 }}
+                      initial={{ scale: 0.4, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 2.2, opacity: 0, filter: 'blur(8px)' }}
-                      transition={{ type: 'spring', stiffness: 220, damping: 14 }}
+                      exit={{ scale: 1.8, opacity: 0 }}
+                      transition={{ duration: 0.35, ease: 'easeOut' }}
                       style={{
                         fontSize: '110px',
                         fontWeight: 900,
                         color: '#f3d08a',
                         fontFamily: "'Cinzel', serif",
-                        textShadow: '0 0 30px #f3d08a, 0 0 60px #f3d08a',
-                        lineHeight: 1
+                        textShadow: '0 0 25px rgba(243, 208, 138, 0.8)',
+                        lineHeight: 1,
+                        transform: 'translateZ(0)',
+                        willChange: 'transform, opacity'
                       }}
                     >
                       {count}
@@ -693,8 +614,8 @@ export default function App() {
                 key="wish-message-view"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.8 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.5 }}
                 onClick={() => setShowVideo(true)}
                 style={{
                   width: '100%',
@@ -705,29 +626,32 @@ export default function App() {
                   justifyContent: 'center',
                   textAlign: 'center',
                   margin: 'auto',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  transform: 'translateZ(0)',
+                  willChange: 'transform, opacity'
                 }}
               >
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.85, y: 15 }}
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   style={{
                     width: '100%',
                     padding: '36px 20px',
                     borderRadius: '32px',
-                    background: 'rgba(20, 12, 28, 0.78)',
-                    backdropFilter: 'blur(20px)',
-                    WebkitBackdropFilter: 'blur(20px)',
+                    background: 'rgba(20, 12, 28, 0.92)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                     border: '1px solid rgba(243, 208, 138, 0.35)',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9), inset 0 1px 2px rgba(255, 255, 255, 0.2), 0 0 40px rgba(243, 208, 138, 0.15)',
+                    boxShadow: '0 20px 45px rgba(0, 0, 0, 0.8), 0 0 30px rgba(243, 208, 138, 0.15)',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    transform: 'translateZ(0)'
                   }}
                 >
                   <div style={{ marginBottom: '18px' }}>
