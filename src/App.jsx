@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, Gift, FileText, X, Play } from 'lucide-react';
+import { Crown, Gift, FileText, X, Play, Volume2, VolumeX } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 import { SparkleCanvas } from './components/SparkleCanvas';
@@ -15,10 +15,12 @@ export default function App() {
   // Video 1 (one.mp4) states
   const [showVideo, setShowVideo] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
+  const [isPlayingOne, setIsPlayingOne] = useState(false);
   
   // Video 2 (two.mp4) & Gift states
   const [showTwoVideo, setShowTwoVideo] = useState(false);
   const [twoVideoEnded, setTwoVideoEnded] = useState(false);
+  const [isTwoMuted, setIsTwoMuted] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
 
   const videoRef = useRef(null);
@@ -51,6 +53,45 @@ export default function App() {
     })();
   };
 
+  // Play Video 1 directly on user tap with guaranteed audio
+  const handlePlayVideoOne = () => {
+    hasInteractedRef.current = true;
+    if (videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1.0;
+      videoRef.current.play().then(() => {
+        setIsPlayingOne(true);
+      }).catch((err) => {
+        console.log("Play error, retrying:", err);
+        videoRef.current.muted = false;
+        videoRef.current.play();
+        setIsPlayingOne(true);
+      });
+    }
+  };
+
+  const unmuteTwo = () => {
+    if (twoVideoRef.current) {
+      twoVideoRef.current.muted = false;
+      twoVideoRef.current.volume = 1.0;
+      if (twoVideoRef.current.currentTime < 4) {
+        twoVideoRef.current.currentTime = 0;
+      }
+      twoVideoRef.current.play().catch(() => {});
+      setIsTwoMuted(false);
+    }
+  };
+
+  const startVideoOne = () => {
+    hasInteractedRef.current = true;
+    setShowVideo(true);
+  };
+
+  const startVideoTwo = () => {
+    hasInteractedRef.current = true;
+    setShowTwoVideo(true);
+  };
+
   // STEP 1: 3-2-1 Countdown Timer
   useEffect(() => {
     if (count === 0) {
@@ -70,75 +111,40 @@ export default function App() {
   useEffect(() => {
     if (isFinished && !showVideo && !videoEnded) {
       const videoTimer = setTimeout(() => {
-        setShowVideo(true);
+        startVideoOne();
       }, 6000);
 
       return () => clearTimeout(videoTimer);
     }
   }, [isFinished, showVideo, videoEnded]);
 
-  // Listen for any user interaction to unlock audio
+  // Global user interaction listener to unmute video 2 if needed
   useEffect(() => {
     const handleUnlockAudio = () => {
       hasInteractedRef.current = true;
-      try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (AudioContext) {
-          const ctx = new AudioContext();
-          if (ctx.state === 'suspended') {
-            ctx.resume();
-          }
-        }
-      } catch {
-        // ignore
-      }
 
-      if (videoRef.current) {
-        videoRef.current.muted = false;
-      }
-      if (twoVideoRef.current) {
-        twoVideoRef.current.muted = false;
+      if (twoVideoRef.current && isTwoMuted) {
+        unmuteTwo();
       }
     };
 
     window.addEventListener('click', handleUnlockAudio);
-    window.addEventListener('touchstart', handleUnlockAudio);
-    window.addEventListener('pointerdown', handleUnlockAudio);
+    window.addEventListener('touchstart', handleUnlockAudio, { passive: true });
     window.addEventListener('keydown', handleUnlockAudio);
 
     return () => {
       window.removeEventListener('click', handleUnlockAudio);
       window.removeEventListener('touchstart', handleUnlockAudio);
-      window.removeEventListener('pointerdown', handleUnlockAudio);
       window.removeEventListener('keydown', handleUnlockAudio);
     };
-  }, []);
+  }, [isTwoMuted]);
 
-  // STEP 3: Play video 1 (one.mp4) default unmuted
+  // STEP 3: Prime video 1 (one.mp4) ready for tap to play
   useEffect(() => {
     if (showVideo && videoRef.current) {
-      const playVideo = async () => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        // Default unmuted
-        video.muted = false;
-
-        try {
-          await video.play();
-          return;
-        } catch (err) {
-          console.log("Browser blocked unmuted autoplay for one.mp4, playing muted until tap:", err);
-          try {
-            video.muted = true;
-            await video.play();
-          } catch (e) {
-            console.log("Autoplay failed completely:", e);
-          }
-        }
-      };
-
-      playVideo();
+      videoRef.current.currentTime = 0;
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1.0;
     }
   }, [showVideo]);
 
@@ -150,14 +156,17 @@ export default function App() {
         if (!video) return;
 
         video.muted = false;
+        video.volume = 1.0;
 
         try {
           await video.play();
+          setIsTwoMuted(false);
           return;
         } catch (err) {
           console.log("Browser blocked unmuted autoplay for two.mp4, playing muted until tap:", err);
           try {
             video.muted = true;
+            setIsTwoMuted(true);
             await video.play();
           } catch (e) {
             console.log("Autoplay failed for two.mp4:", e);
@@ -185,7 +194,7 @@ export default function App() {
 
   // Handle Next button click from LetterPage
   const handleNextFromLetter = () => {
-    setShowTwoVideo(true);
+    startVideoTwo();
   };
 
   return (
@@ -217,11 +226,7 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
-            onClick={() => {
-              if (videoRef.current) {
-                videoRef.current.muted = false;
-              }
-            }}
+            onClick={!isPlayingOne ? handlePlayVideoOne : undefined}
             style={{
               position: 'fixed',
               inset: 0,
@@ -229,15 +234,96 @@ export default function App() {
               backgroundColor: '#000000',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              cursor: !isPlayingOne ? 'pointer' : 'default'
             }}
           >
+            {/* Tap anywhere on video to play with audio prompt */}
+            <AnimatePresence>
+              {!isPlayingOne && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 100001,
+                    backgroundColor: 'rgba(7, 4, 10, 0.65)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    padding: '20px',
+                    textAlign: 'center'
+                  }}
+                >
+                  {/* Glowing Golden Play Button */}
+                  <motion.div
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      boxShadow: [
+                        '0 0 30px rgba(243, 208, 138, 0.6)',
+                        '0 0 60px rgba(243, 208, 138, 1)',
+                        '0 0 30px rgba(243, 208, 138, 0.6)'
+                      ]
+                    }}
+                    transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+                    style={{
+                      width: '84px',
+                      height: '84px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #bf953f 0%, #fcf6ba 50%, #aa771c 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: '24px'
+                    }}
+                  >
+                    <Play size={40} fill="#07040a" color="#07040a" style={{ marginLeft: '4px' }} />
+                  </motion.div>
+
+                  <h2
+                    style={{
+                      fontFamily: "'Cinzel', serif",
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      letterSpacing: '3px',
+                      color: '#f3d08a',
+                      textTransform: 'uppercase',
+                      textShadow: '0 0 20px rgba(243, 208, 138, 0.9)',
+                      margin: '0 0 10px 0'
+                    }}
+                  >
+                    Tap Anywhere To Play
+                  </h2>
+
+                  <p
+                    style={{
+                      fontFamily: "'Plus Jakarta Sans', sans-serif",
+                      fontSize: '13px',
+                      color: '#e0a9af',
+                      letterSpacing: '1px',
+                      margin: 0
+                    }}
+                  >
+                    🔊 Tap to play with sound
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <video
               ref={videoRef}
               src="/one.mp4"
               playsInline
-              autoPlay
-              controls
+              preload="auto"
+              controls={isPlayingOne}
               onEnded={handleVideoEnded}
               style={{
                 width: '100%',
@@ -258,8 +344,8 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
             onClick={() => {
-              if (twoVideoRef.current) {
-                twoVideoRef.current.muted = false;
+              if (isTwoMuted) {
+                unmuteTwo();
               }
             }}
             style={{
@@ -269,14 +355,50 @@ export default function App() {
               backgroundColor: '#000000',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              cursor: isTwoMuted ? 'pointer' : 'default'
             }}
           >
+            {/* Unmute prompt if browser started video muted */}
+            {isTwoMuted && (
+              <motion.button
+                initial={{ scale: 0.85, opacity: 0, y: -20 }}
+                animate={{ scale: [1, 1.08, 1], opacity: 1, y: 0 }}
+                transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  unmuteTwo();
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '28px',
+                  zIndex: 100001,
+                  background: 'linear-gradient(90deg, #bf953f 0%, #fcf6ba 50%, #aa771c 100%)',
+                  color: '#07040a',
+                  padding: '12px 24px',
+                  borderRadius: '30px',
+                  border: 'none',
+                  boxShadow: '0 0 35px rgba(243, 208, 138, 0.95), 0 10px 25px rgba(0,0,0,0.7)',
+                  fontFamily: "'Cinzel', serif",
+                  fontWeight: 'bold',
+                  fontSize: '11px',
+                  letterSpacing: '1.5px',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <VolumeX size={18} color="#07040a" />
+                Tap For Sound 🔊
+              </motion.button>
+            )}
+
             <video
               ref={twoVideoRef}
               src="/two.mp4"
               playsInline
-              autoPlay
               controls
               onEnded={handleTwoVideoEnded}
               style={{
@@ -616,7 +738,7 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.5 }}
-                onClick={() => setShowVideo(true)}
+                onClick={() => startVideoOne()}
                 style={{
                   width: '100%',
                   maxWidth: '360px',
@@ -702,34 +824,6 @@ export default function App() {
                   >
                     Wishing you a Happiest Birthday di
                   </h1>
-
-                  {/* Play Celebration button / prompt */}
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowVideo(true);
-                    }}
-                    style={{
-                      marginTop: '22px',
-                      padding: '9px 20px',
-                      borderRadius: '20px',
-                      background: 'linear-gradient(90deg, #bf953f 0%, #fcf6ba 50%, #aa771c 100%)',
-                      color: '#07040a',
-                      fontWeight: 'bold',
-                      fontSize: '10px',
-                      fontFamily: "'Cinzel', serif",
-                      letterSpacing: '1.5px',
-                      textTransform: 'uppercase',
-                      boxShadow: '0 0 20px rgba(243, 208, 138, 0.6)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Play size={13} fill="#07040a" color="#07040a" /> Play Celebration ✨
-                  </motion.div>
                 </motion.div>
               </motion.div>
             )}
